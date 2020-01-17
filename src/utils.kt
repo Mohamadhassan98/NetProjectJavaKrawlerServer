@@ -13,11 +13,11 @@ val dict: Dictionary by lazy {
 }
 
 fun String.getHyponyms() = dict.lookupIndexWord(POS.NOUN, this)
-    .senses
-    .flatMap {
+    ?.senses
+    ?.flatMap {
         it.getPointers(PointerType.HYPONYM).flatMap {
             it.targetSynset.words.map {
                 it.lemma
             }
         }
-    }
+    }.orEmpty()
