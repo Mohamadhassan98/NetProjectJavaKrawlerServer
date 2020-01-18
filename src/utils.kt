@@ -21,3 +21,8 @@ fun String.getHyponyms() = dict.lookupIndexWord(POS.NOUN, this)
             }
         }
     }.orEmpty()
+
+fun String.getRandomHyponym(): String {
+    val hyponyms = getHyponyms()
+    return hyponyms.random()
+}

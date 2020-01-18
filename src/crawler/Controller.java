@@ -7,16 +7,16 @@ import edu.uci.ics.crawler4j.robotstxt.RobotstxtConfig;
 import edu.uci.ics.crawler4j.robotstxt.RobotstxtServer;
 import utils.StaticAttributes;
 
+import static utils.StaticAttributes.CRAWL_STORAGE_FOLDER;
+
 public class Controller {
 
 
     public static void main(String[] args) throws Exception {
-        String crawlStorageFolder = "./data/crawl/root";
-        int numberOfCrawlers = 7;
+        int numberOfCrawlers = 8;
 
         CrawlConfig config = new CrawlConfig();
-        config.setCrawlStorageFolder(crawlStorageFolder);
-        config.setPolitenessDelay(10);
+        config.setCrawlStorageFolder(CRAWL_STORAGE_FOLDER);
         config.setMaxDepthOfCrawling(1);
 
 
@@ -33,11 +33,11 @@ public class Controller {
 
 
         // The factory which creates instances of crawlers.
-        CrawlController.WebCrawlerFactory<FormCrawler> factory = FormCrawler::new;
+//        CrawlController.WebCrawlerFactory<FormCrawler> factory = FormCrawler::new;
 
         // Start the crawl. This is a blocking operation, meaning that your code
         // will reach the line after this only when crawling is finished.
-        controller.start(factory, numberOfCrawlers);
+//        controller.start(factory, numberOfCrawlers);
     }
 
 }
