@@ -4,9 +4,15 @@ import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.PrintWriter;
+import java.net.URI;
+import java.net.URISyntaxException;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 public class StaticAttributes {
     public static final String USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/51.0.2704.103 Safari/537.36";
@@ -116,5 +122,65 @@ public class StaticAttributes {
 
     public static void clearData(Map<String, Boolean> data) {
         data.clear();
+    }
+
+    public static String normalizeUrl(String url) {
+        String result = url.toLowerCase();
+        if (result.startsWith("/")) {
+            result = result.substring(1);
+        }
+        if (result.endsWith("/")) {
+            result = result.substring(0, result.length() - 1);
+        }
+        return result;
+    }
+
+    public static boolean isAbsoluteUrl(String url) {
+        try {
+            return new URI(url).isAbsolute();
+        } catch (URISyntaxException ignored) {
+            return false;
+        }
+    }
+
+    public static HttpResponse<String> requestGet(String url, Map<String, String> params) {
+        String actualUrl = url + "?" + params.entrySet().stream().map(param -> param.getKey() + "=" + param.getValue()).collect(Collectors.joining("&"));
+        HttpClient client = HttpClient
+                .newBuilder()
+                .followRedirects(HttpClient.Redirect.NORMAL)
+                .build();
+        HttpRequest request = HttpRequest
+                .newBuilder()
+                .GET()
+                .uri(URI.create(actualUrl))
+                .build();
+        try {
+            return client.send(request, HttpResponse.BodyHandlers.ofString());
+        } catch (IOException | InterruptedException e) {
+            e.printStackTrace();
+        }
+        return null;
+    }
+
+    public static HttpResponse<String> requestPost(String url, Map<String, String> params) {
+        HttpClient client = HttpClient
+                .newBuilder()
+                .followRedirects(HttpClient.Redirect.NORMAL)
+                .build();
+        HttpRequest request = HttpRequest
+                .newBuilder()
+                .POST(HttpRequest.BodyPublishers.ofString(params.entrySet().stream().map(param -> param.getKey() + "=" + param.getValue()).collect(Collectors.joining("&"))))
+                .uri(URI.create(url))
+                .build();
+        try {
+            return client.send(request, HttpResponse.BodyHandlers.ofString());
+        } catch (IOException | InterruptedException e) {
+            e.printStackTrace();
+        }
+        return null;
+    }
+
+    public static String rawUrl(String url) {
+        return url.split("://")[1].split("/")[0];
     }
 }

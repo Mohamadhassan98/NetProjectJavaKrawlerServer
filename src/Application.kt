@@ -17,6 +17,7 @@ import io.ktor.websocket.WebSockets
 import io.ktor.websocket.webSocket
 import kotlinx.coroutines.delay
 import utils.StaticAttributes
+import utils.StaticAttributes.normalizeUrl
 import java.io.File
 import java.time.Duration
 
@@ -49,14 +50,14 @@ fun Application.module(testing: Boolean = false) {
                         val requestText = frame.readText()
                         println(requestText)
                         val request = jacksonObjectMapper().readValue<CrawlRequest>(requestText)
-                        val siteMap = getSiteMap("${request.url}/sitemap.xml")
+                        val siteMap = getSiteMap("${normalizeUrl(request.url)}/sitemap.xml")
                         val data = jacksonObjectMapper().writerWithDefaultPrettyPrinter()
                             .writeValueAsString(mapOf("sitemap" to siteMap.isNotEmpty()))
                         outgoing.send(Frame.Text(data))
-                        if (siteMap.isEmpty()) {
-                            crawler = deepCrawl(request)
+                        crawler = if (siteMap.isEmpty()) {
+                            deepCrawl(request)
                         } else {
-                            crawler = crawlWithSiteMap(siteMap, request.url)
+                            crawlWithSiteMap(siteMap, request.url)
                         }
                     }
                 }
@@ -66,7 +67,10 @@ fun Application.module(testing: Boolean = false) {
             for (frame in incoming) {
                 println("retrieving data")
                 var page = 0
-                while (crawlData.isEmpty());
+                while (crawlData.isEmpty()) {
+                    delay(1000)
+                    continue
+                }
                 while (true) {
                     if (crawler.isFinished) {
                         val rem = crawlData.size % 10
