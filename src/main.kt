@@ -15,7 +15,7 @@ import java.net.http.HttpClient
 import java.net.http.HttpRequest
 import java.net.http.HttpResponse
 
-val crawlData: MutableSet<String> by lazy { mutableSetOf<String>() }
+var crawlData = mutableMapOf<String, Boolean>()
 
 fun getSiteMap(url: String): List<String> {
     val client = HttpClient
@@ -48,7 +48,7 @@ fun getSiteMap(url: String): List<String> {
     return sites
 }
 
-fun crawlWithSiteMap(sitemap: List<String>): CrawlController {
+fun crawlWithSiteMap(sitemap: List<String>, baseUrl: String): CrawlController {
     val config = CrawlConfig()
     config.crawlStorageFolder = CRAWL_STORAGE_FOLDER
     // don't crawl links on page
@@ -64,7 +64,7 @@ fun crawlWithSiteMap(sitemap: List<String>): CrawlController {
     sitemap.forEach {
         controller.addSeed(it)
     }
-    val factory = { SimpleCrawler(crawlData) }
+    val factory = { SimpleCrawler(crawlData, baseUrl) }
     controller.startNonBlocking(factory, 8)
     return controller
 }
@@ -89,21 +89,9 @@ fun deepCrawl(request: CrawlRequest): CrawlController {
     return controller
 }
 
-fun indexSite(url: String): String {
-    val client = HttpClient
-        .newBuilder()
-        .followRedirects(HttpClient.Redirect.NORMAL)
-        .build()
-    val request = HttpRequest
-        .newBuilder()
-        .GET()
-        .uri(URI.create(url))
-        .build()
-    return client.send(request, HttpResponse.BodyHandlers.ofString()).body()
-}
-
 fun main() {
-    println(getSiteMap("https://ktor.io/sitemap.xml").size)
+//    println(getSiteMap("https://ktor.io/sitemap.xml").size)
+
 }
 
 /*

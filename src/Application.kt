@@ -16,6 +16,7 @@ import io.ktor.routing.routing
 import io.ktor.websocket.WebSockets
 import io.ktor.websocket.webSocket
 import kotlinx.coroutines.delay
+import utils.StaticAttributes
 import java.io.File
 import java.time.Duration
 
@@ -42,6 +43,7 @@ fun Application.module(testing: Boolean = false) {
     routing {
         webSocket("/crawl") {
             for (frame in incoming) {
+                StaticAttributes.clearData(crawlData)
                 when (frame) {
                     is Frame.Text -> {
                         val requestText = frame.readText()
@@ -51,9 +53,9 @@ fun Application.module(testing: Boolean = false) {
                             .writeValueAsString(mapOf("sitemap" to siteMap.isNotEmpty()))
                         outgoing.send(Frame.Text(data))
                         if (siteMap.isEmpty()) {
-                            //start deep crawling
+                            crawler = deepCrawl(request)
                         } else {
-                            crawler = crawlWithSiteMap(siteMap)
+                            crawler = crawlWithSiteMap(siteMap, request.url)
                         }
                     }
                 }
@@ -61,6 +63,7 @@ fun Application.module(testing: Boolean = false) {
         }
         webSocket("/result") {
             for (frame in incoming) {
+                println("retrieving data")
                 var page = 0
                 while (crawlData.isEmpty());
                 while (true) {
@@ -69,7 +72,7 @@ fun Application.module(testing: Boolean = false) {
                         if (crawlData.size >= (page + 1) * 10) {
                             val data = crawlData.toList().subList(page * 10, (page + 1) * 10)
                             val obj = data.map {
-                                mapOf("url" to it, "hasForm" to false, "id" to it.hashCode())
+                                mapOf("url" to it.first, "hasForm" to it.second, "id" to it.hashCode())
                             }
                             val json = jacksonObjectMapper().writerWithDefaultPrettyPrinter().writeValueAsString(
                                 mapOf("page" to page, "data" to obj)
@@ -79,7 +82,7 @@ fun Application.module(testing: Boolean = false) {
                         } else if (rem > 0) {
                             val data = crawlData.toList().takeLast(rem)
                             val obj = data.map {
-                                mapOf("url" to it, "hasForm" to false, "id" to it.hashCode())
+                                mapOf("url" to it.first, "hasForm" to it.second, "id" to it.hashCode())
                             }
                             val json = jacksonObjectMapper().writerWithDefaultPrettyPrinter().writeValueAsString(
                                 mapOf("page" to page, "data" to obj)
@@ -92,7 +95,7 @@ fun Application.module(testing: Boolean = false) {
                         if (crawlData.size >= (page + 1) * 10) {
                             val data = crawlData.toList().subList(page * 10, (page + 1) * 10)
                             val obj = data.map {
-                                mapOf("url" to it, "hasForm" to false, "hash" to it.hashCode())
+                                mapOf("url" to it.first, "hasForm" to it.second, "hash" to it.hashCode())
                             }
                             val json = jacksonObjectMapper().writerWithDefaultPrettyPrinter().writeValueAsString(
                                 mapOf("page" to page, "data" to obj)
@@ -109,7 +112,9 @@ fun Application.module(testing: Boolean = false) {
             for (frame in incoming) {
                 if (frame is Frame.Text) {
                     val url = frame.readText()
-                    val file = File("./data/html/${url}.html")
+                    val (baseUrl, hash) = url.split(", ")
+                    val normalizedBaseUrl = baseUrl.split("://".toRegex())[1].split("/".toRegex())[0]
+                    val file = File("./data/html/$normalizedBaseUrl/${hash}.html")
                     val text = file.readText()
                     outgoing.send(Frame.Text(text))
                 }

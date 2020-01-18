@@ -4,10 +4,9 @@ import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.PrintWriter;
-import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Date;
 import java.util.List;
+import java.util.Map;
 
 public class StaticAttributes {
     public static final String baseUrl = "http://lms.ui.ac.ir/";
@@ -93,8 +92,13 @@ public class StaticAttributes {
     );
 
 
-    public static void saveHtml(String html, String url) {
-        File file = new File("./data/html/" + url.hashCode() + ".html");
+    public static void saveHtml(String html, String url, String baseUrl) {
+        String normalizedBaseUrl = baseUrl.split("://")[1].split("/")[0];
+        File baseFile = new File("./data/html/" + normalizedBaseUrl + "/");
+        if (!baseFile.exists()) {
+            baseFile.mkdirs();
+        }
+        File file = new File("./data/html/" + normalizedBaseUrl + "/" + url.hashCode() + ".html");
         if (!file.exists()) {
             try {
                 file.createNewFile();
@@ -109,5 +113,9 @@ public class StaticAttributes {
                 e.printStackTrace();
             }
         }
+    }
+
+    public static void clearData(Map<String, Boolean> data) {
+        data.clear();
     }
 }
