@@ -8,6 +8,7 @@ import net.project.UtilsKt;
 import org.jsoup.Connection;
 import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
+import org.jsoup.nodes.Element;
 import org.jsoup.nodes.FormElement;
 import org.jsoup.select.Elements;
 import utils.StaticAttributes;
@@ -47,41 +48,55 @@ public class FormCrawler extends WebCrawler {
                 String method = forms.get(i).attributes().get("method");
 
                 List<Connection.KeyVal> inputs = forms.get(i).formData();
-                List<List<String>> wordNetList = new ArrayList<>();
-
-                Random r = new Random();
-                int min = 500;
-                for (int j = 0; j < inputs.size(); j++) {
-                    wordNetList.add(UtilsKt.getHyponyms(inputs.get(j).key()));
-                    int temp = wordNetList.get(i).size();
-                    if (temp < min && temp != 0) {
-                        r.nextInt(temp);
-                        min = temp;
-                    } else {
-                        System.out.println("No similar word found");
-                        break;
-                    }
-                }
-
 
                 // for select random word from wordNetLists and try to submiting
-                if (min != 500)
-                    for (int k = 0; k < 10; k++) {
-                        for (int j = 0; j < inputs.size(); j++) {
-                            forms.get(i)
-                                    .selectFirst("#" + inputs.get(j).key())
-                                    .val(wordNetList.get(j).get(r.nextInt()));
+                for (int k = 0; k < 10; k++) {
+                    for (int j = 0; j < inputs.size(); j++) {
+                        Element eTemp = forms.get(i)
+                                .selectFirst("#" + inputs.get(j).key());
+                        String wordTemp;
+                        switch (inputs.get(j).key("type").toString()) {
+                            case "text":
+                            case "search":
+                                wordTemp = UtilsKt.getRandomHyponym(inputs.get(j).key());
+                                eTemp.val(wordTemp.isEmpty() ? "abs" : wordTemp);
+                                break;
+                            case "date":
+                                eTemp.val(StaticAttributes.randomDate.get(k));
+                                break;
+                            case "email":
+                                eTemp.val(StaticAttributes.randomEmail.get(k));
+                                break;
+                            case "month":
+                                eTemp.val(StaticAttributes.randomMonth.get(k));
+                                break;
+                            case "number":
+                                eTemp.val(new Random().nextInt()+"");
+                                break;
+                            case "tel":
+                                eTemp.val(StaticAttributes.randomTel.get(k));
+                                break;
+                            case "time":
+                                eTemp.val(StaticAttributes.randomTime.get(k));
+                                break;
+                            case "week":
+                                eTemp.val(StaticAttributes.randomWeek.get(k));
+                                break;
+                            default:
+                                eTemp.val("haaale");
+                                break;
+                        }
 
 
-                            // test of login page lms and ok
+                        // test of login page lms and ok
 //                        forms.get(i).selectFirst("#username").val("953611133003");
 //                        forms.get(i).selectFirst("#password").val("3920672771");
-                        }
-                        if (submittingForm(forms.get(i), method, action))
-                            break;
                     }
+                    if (submittingForm(forms.get(i), method, action))
+                        break;
+                }
                 FileWriter fw = new FileWriter(
-                        "./dataFileOfPageCrawl/" + id + ".html"
+                        "./data/form/" + id + ".html"
                 );
                 fw.write(forms.get(i).attributes().html());
                 fw.write(forms.get(i).html());
@@ -91,7 +106,6 @@ public class FormCrawler extends WebCrawler {
             System.out.println(e);
         }
         System.out.println("Success...");
-
 
     }
 
@@ -124,16 +138,6 @@ public class FormCrawler extends WebCrawler {
 
     }
 
-    /**
-     * This method receives two parameters. The first parameter is the page
-     * in which we have discovered this new url and the second parameter is
-     * the new url. You should implement this function to specify whether
-     * the given url should be crawled or not (based on your crawling logic).
-     * In this example, we are instructing the crawler to ignore urls that
-     * have css, js, git, ... extensions and to only accept urls that start
-     * with "https://www.ics.uci.edu/". In this case, we didn't need the
-     * referringPage parameter to make the decision.
-     */
     @Override
     public boolean shouldVisit(Page referringPage, WebURL url) {
         String href = url.getURL().toLowerCase();
@@ -144,10 +148,6 @@ public class FormCrawler extends WebCrawler {
         return b;
     }
 
-    /**
-     * This function is called when a page is fetched and ready
-     * to be processed by your program.
-     */
     @Override
     public void visit(Page page) {
         String url = page.getWebURL().getURL().toLowerCase();
