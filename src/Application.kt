@@ -47,6 +47,7 @@ fun Application.module(testing: Boolean = false) {
                 when (frame) {
                     is Frame.Text -> {
                         val requestText = frame.readText()
+                        println(requestText)
                         val request = jacksonObjectMapper().readValue<CrawlRequest>(requestText)
                         val siteMap = getSiteMap("${request.url}/sitemap.xml")
                         val data = jacksonObjectMapper().writerWithDefaultPrettyPrinter()
@@ -72,7 +73,7 @@ fun Application.module(testing: Boolean = false) {
                         if (crawlData.size >= (page + 1) * 10) {
                             val data = crawlData.toList().subList(page * 10, (page + 1) * 10)
                             val obj = data.map {
-                                mapOf("url" to it.first, "hasForm" to it.second, "id" to it.hashCode())
+                                mapOf("url" to it.first, "hasForm" to it.second, "id" to it.first.hashCode())
                             }
                             val json = jacksonObjectMapper().writerWithDefaultPrettyPrinter().writeValueAsString(
                                 mapOf("page" to page, "data" to obj)
@@ -82,7 +83,7 @@ fun Application.module(testing: Boolean = false) {
                         } else if (rem > 0) {
                             val data = crawlData.toList().takeLast(rem)
                             val obj = data.map {
-                                mapOf("url" to it.first, "hasForm" to it.second, "id" to it.hashCode())
+                                mapOf("url" to it.first, "hasForm" to it.second, "id" to it.first.hashCode())
                             }
                             val json = jacksonObjectMapper().writerWithDefaultPrettyPrinter().writeValueAsString(
                                 mapOf("page" to page, "data" to obj)
@@ -95,7 +96,7 @@ fun Application.module(testing: Boolean = false) {
                         if (crawlData.size >= (page + 1) * 10) {
                             val data = crawlData.toList().subList(page * 10, (page + 1) * 10)
                             val obj = data.map {
-                                mapOf("url" to it.first, "hasForm" to it.second, "hash" to it.hashCode())
+                                mapOf("url" to it.first, "hasForm" to it.second, "hash" to it.first.hashCode())
                             }
                             val json = jacksonObjectMapper().writerWithDefaultPrettyPrinter().writeValueAsString(
                                 mapOf("page" to page, "data" to obj)
@@ -114,6 +115,8 @@ fun Application.module(testing: Boolean = false) {
                     val url = frame.readText()
                     val (baseUrl, hash) = url.split(", ")
                     val normalizedBaseUrl = baseUrl.split("://".toRegex())[1].split("/".toRegex())[0]
+                    println(normalizedBaseUrl)
+                    println(hash)
                     val file = File("./data/html/$normalizedBaseUrl/${hash}.html")
                     val text = file.readText()
                     outgoing.send(Frame.Text(text))

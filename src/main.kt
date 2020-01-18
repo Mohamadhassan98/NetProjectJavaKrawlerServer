@@ -90,52 +90,19 @@ fun deepCrawl(request: CrawlRequest): CrawlController {
 }
 
 fun main() {
-//    println(getSiteMap("https://ktor.io/sitemap.xml").size)
-
-}
-
-/*
-fun main() {
-    println("________________________________________")
-    val siteMap = getSiteMap("https://ktor.io/sitemap.xml")
-    println(siteMap)
-    println("________________________________________")
-    println(siteMap.size)
-    val crawlStorageFolder = "./data/crawl/root"
-    val numberOfCrawlers = 8
-
-    val config = CrawlConfig()
-    config.crawlStorageFolder = crawlStorageFolder
-    config.maxDepthOfCrawling = 0
-    config.politenessDelay = 200
-    // Instantiate the controller for this crawl.
-    // Instantiate the controller for this crawl.
-    val pageFetcher = PageFetcher(config)
-    val robotstxtConfig = RobotstxtConfig()
-    val robotstxtServer = RobotstxtServer(robotstxtConfig, pageFetcher)
-    val controller = CrawlController(config, pageFetcher, robotstxtServer)
-
-    // For each crawl, you need to add some seed urls. These are the first
-    // URLs that are fetched and then the crawler starts following links
-    // which are found in these pages
-
-    // For each crawl, you need to add some seed urls. These are the first
-    // URLs that are fetched and then the crawler starts following links
-    // which are found in these pages
-    siteMap.forEach {
-        controller.addSeed(it)
+    val client = HttpClient
+        .newBuilder()
+        .followRedirects(HttpClient.Redirect.NORMAL)
+        .build()
+    val request = HttpRequest
+        .newBuilder()
+        .GET()
+        .uri(URI.create("http://lms.ui.ac.ir"))
+        .build()
+    val response = client.send(request, HttpResponse.BodyHandlers.ofString())
+    Jsoup.parse(response.body()).body().getElementsByTag("form").forEach {
+        it.getElementsByTag("input").forEach {
+            println(it.attr("type"))
+        }
     }
-
-    // The factory which creates instances of crawlers.
-
-    // The factory which creates instances of crawlers.
-    val result = mutableMapOf<String, String>()
-    val factory = WebCrawlerFactory { SimpleCrawler(result) }
-
-    // Start the crawl. This is a blocking operation, meaning that your code
-    // will reach the line after this only when crawling is finished.
-
-    // Start the crawl. This is a blocking operation, meaning that your code
-    // will reach the line after this only when crawling is finished.
-    controller.start(factory, numberOfCrawlers)
-}*/
+}
