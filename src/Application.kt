@@ -115,5 +115,17 @@ fun Application.module(testing: Boolean = false) {
                 }
             }
         }
+        webSocket("/form") {
+            for (frame in incoming) {
+                if (frame is Frame.Text) {
+                    val url = frame.readText()
+                    val root = File("./data/form/$url")
+                    val data =
+                        root.listFiles()?.map { it.readText() }?.fold("") { acc, s -> "$acc$s-------------------" }
+                            ?: ""
+                    outgoing.send(Frame.Text(data))
+                }
+            }
+        }
     }
 }

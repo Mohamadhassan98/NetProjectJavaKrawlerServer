@@ -1,5 +1,6 @@
 package net.project
 
+import crawler.FormCrawler
 import crawler.SimpleCrawler
 import edu.uci.ics.crawler4j.crawler.CrawlConfig
 import edu.uci.ics.crawler4j.crawler.CrawlController
@@ -68,8 +69,24 @@ fun crawlWithSiteMap(sitemap: List<String>): CrawlController {
     return controller
 }
 
-fun deepCrawl(url: String) {
+fun deepCrawl(request: CrawlRequest): CrawlController {
+    val config = CrawlConfig()
+    config.crawlStorageFolder = CRAWL_STORAGE_FOLDER
+    config.maxDepthOfCrawling = 4
+    config.cleanupDelaySeconds = 2
+    config.threadShutdownDelaySeconds = 2
+    config.threadMonitoringDelaySeconds = 2
+    config.isRespectNoFollow = request.respectRobots
+    config.isRespectNoIndex = request.respectRobots
 
+    val pageFetcher = PageFetcher(config)
+    val robotstxtConfig = RobotstxtConfig()
+    val robotstxtServer = RobotstxtServer(robotstxtConfig, pageFetcher)
+    val controller = CrawlController(config, pageFetcher, robotstxtServer)
+    controller.addSeed(request.url)
+    val factory = { FormCrawler(request.includeExternals, crawlData, request.url) }
+    controller.startNonBlocking(factory, 8)
+    return controller
 }
 
 fun indexSite(url: String): String {
