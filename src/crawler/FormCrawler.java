@@ -8,6 +8,7 @@ import net.project.UtilsKt;
 import org.jsoup.Connection;
 import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
+import org.jsoup.nodes.Element;
 import org.jsoup.nodes.FormElement;
 import org.jsoup.select.Elements;
 import utils.StaticAttributes;
@@ -40,48 +41,72 @@ public class FormCrawler extends WebCrawler {
         try {
             Elements form = html.getElementsByTag("form");
             List<FormElement> forms = form.forms();
+
             for (int i = 0; i < forms.size(); i++) {
                 String action = forms.get(i).attributes().get("action");
                 String id = form.get(i).id();
                 String method = forms.get(i).attributes().get("method");
+
                 List<Connection.KeyVal> inputs = forms.get(i).formData();
-                List<List<String>> wordNetList = new ArrayList<>();
-                Random r = new Random();
-                int min = 500;
-                for (int j = 0; j < inputs.size(); j++) {
-                    wordNetList.add(UtilsKt.getHyponyms(inputs.get(j).key()));
-                    int temp = wordNetList.get(i).size();
-                    if (temp < min && temp != 0) {
-                        r.nextInt(temp);
-                        min = temp;
-                    } else {
-                        System.out.println("No similar word found");
-                        break;
-                    }
-                }
-                // for select random word from wordNetLists and try to submitting
-                if (min != 500)
-                    for (int k = 0; k < 10; k++) {
-                        for (int j = 0; j < inputs.size(); j++) {
-                            forms.get(i)
-                                    .selectFirst("#" + inputs.get(j).key())
-                                    .val(wordNetList.get(j).get(r.nextInt()));
-                            // test of login page lms and ok
+
+                // for select random word from wordNetLists and try to submiting
+                for (int k = 0; k < 10; k++) {
+                    for (int j = 0; j < inputs.size(); j++) {
+                        Element eTemp = forms.get(i)
+                                .selectFirst("#" + inputs.get(j).key());
+                        String wordTemp;
+                        switch (inputs.get(j).key("type").toString()) {
+                            case "text":
+                            case "search":
+                                wordTemp = UtilsKt.getRandomHyponym(inputs.get(j).key());
+                                eTemp.val(wordTemp.isEmpty() ? "abs" : wordTemp);
+                                break;
+                            case "date":
+                                eTemp.val(StaticAttributes.randomDate.get(k));
+                                break;
+                            case "email":
+                                eTemp.val(StaticAttributes.randomEmail.get(k));
+                                break;
+                            case "month":
+                                eTemp.val(StaticAttributes.randomMonth.get(k));
+                                break;
+                            case "number":
+                                eTemp.val(new Random().nextInt()+"");
+                                break;
+                            case "tel":
+                                eTemp.val(StaticAttributes.randomTel.get(k));
+                                break;
+                            case "time":
+                                eTemp.val(StaticAttributes.randomTime.get(k));
+                                break;
+                            case "week":
+                                eTemp.val(StaticAttributes.randomWeek.get(k));
+                                break;
+                            default:
+                                eTemp.val("haaale");
+                                break;
+                        }
+
+
+                        // test of login page lms and ok
 //                        forms.get(i).selectFirst("#username").val("953611133003");
 //                        forms.get(i).selectFirst("#password").val("3920672771");
-                        }
-                        if (submittingForm(forms.get(i), method, action))
-                            break;
                     }
-                FileWriter fw = new FileWriter("./data/form/" + id + ".html");
+                    if (submittingForm(forms.get(i), method, action))
+                        break;
+                }
+                FileWriter fw = new FileWriter(
+                        "./data/form/" + id + ".html"
+                );
                 fw.write(forms.get(i).attributes().html());
                 fw.write(forms.get(i).html());
                 fw.close();
             }
         } catch (Exception e) {
-            e.printStackTrace();
+            System.out.println(e);
         }
         System.out.println("Success...");
+
     }
 
     public static boolean submittingForm(FormElement form, String method, String action) {
@@ -123,19 +148,20 @@ public class FormCrawler extends WebCrawler {
         return b;
     }
 
-    /**
-     * This function is called when a page is fetched and ready
-     * to be processed by your program.
-     */
     @Override
     public void visit(Page page) {
         String url = page.getWebURL().getURL().toLowerCase();
         System.out.println("Crawled: " + url);
         data.add(url);
         if (page.getParseData() instanceof HtmlParseData) {
-            String htmlParseData = ((HtmlParseData) page.getParseData()).getHtml();
-            StaticAttributes.saveHtml((htmlParseData), url);
-            form(htmlParseData);
+            StaticAttributes.saveHtml(((HtmlParseData) page.getParseData()).getHtml(), url);
+        }
+
+        if (page.getParseData() instanceof HtmlParseData) {
+            HtmlParseData htmlParseData = (HtmlParseData) page.getParseData();
+            String html = htmlParseData.getHtml();
+            Set<WebURL> links = htmlParseData.getOutgoingUrls();
+            form(html);
         }
     }
 }
