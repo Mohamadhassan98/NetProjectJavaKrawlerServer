@@ -28,23 +28,25 @@ public class FormCrawler extends WebCrawler {
 
     private final static Pattern FILTERS = Pattern.compile(".*(\\.(css|js|gif|jpg"
             + "|png|mp3|mp4|zip|gz|apk))$");
-
+    private final Pattern internal;
     private final boolean external;
     private final Map<String, Boolean> data;
     private final String baseUrl;
     private final boolean respectRobots;
     private final boolean hasSiteMap;
     private final Set<String> formActions;
+    private final Set<String> disallowed;
 
-    public FormCrawler(boolean external, Map<String, Boolean> data, Set<String> formActions, String baseUrl, boolean respectRobots, boolean hasSiteMap) {
+    public FormCrawler(Map<String, Boolean> data, Set<String> disallowed, Set<String> formActions, String baseUrl, boolean respectRobots, boolean hasSiteMap, boolean external) {
         this.data = data;
         this.external = external;
         this.baseUrl = normalizeUrl(baseUrl);
         this.respectRobots = respectRobots;
         this.hasSiteMap = hasSiteMap;
         this.formActions = formActions;
+        this.disallowed = disallowed;
+        internal = Pattern.compile("(.*?)" + normalizeUrl(baseUrl).split("://")[1] + "/(.*)");
     }
-
 
     /**
      * Generates data based on name of tag, it's type and retrial time and fill into it
@@ -52,7 +54,7 @@ public class FormCrawler extends WebCrawler {
      * @param input The input element to fill
      * @param k     the time of retrial, in range 0..10 (inclusive)
      */
-    private static void fillDataGenerate(Element input, int k) {
+    private void fillDataGenerate(Element input, int k) {
         String type = input.attr("type").toLowerCase();
         String name = input.attr("name");
         switch (type) {
@@ -114,6 +116,7 @@ public class FormCrawler extends WebCrawler {
                     inputs.forEach(input -> fillDataGenerate(input, finalI));
                     Connection.Response response = submittingForm(formElement, preRequest.cookies());
                     if (response != null && response.statusCode() / 100 == 2) {
+                        extractOutgoingUrls(response.body(), requestUrl).forEach(a -> getMyController().addSeed(a));
                         File file = new File("./data/form_data/" + rawUrl(baseUrl) + "/" + normalizedUrl.hashCode() + "/");
                         if (!file.exists()) {
                             file.mkdirs();
@@ -124,6 +127,7 @@ public class FormCrawler extends WebCrawler {
                             fw.write("with headers " + response.headers() + "\n");
                             fw.write("-----------------------------------------------\n");
                             fw.write(response.body());
+
                         } catch (IOException e) {
                             e.printStackTrace();
                         }
@@ -157,134 +161,30 @@ public class FormCrawler extends WebCrawler {
         return referer + "/" + url;
     }
 
-//    public void form(String htmlText, String url) {
-//        Document html = Jsoup.parse(htmlText);
-//        try {
-//            Elements form = html.getElementsByTag("form");
-//            List<FormElement> forms = form.forms();
-//            data.put(url, !form.isEmpty());
-//
-//            for (int i = 0; i < forms.size(); i++) {
-//                String action = forms.get(i).attributes().get("action");
-//                String id = form.get(i).id();
-//                String method = forms.get(i).attributes().get("method");
-//                Set<Element> elementList = new LinkedHashSet<>(forms.get(i).getElementsByTag("input"));
-//
-//
-//                System.out.println(elementList.size());
-//
-//                // for select random word from wordNetLists and try to submitting
-//                for (int k = 0; k < 10; k++) {
-//                    List<Connection.KeyVal> inputs = forms.get(i).formData();
-//                    for (int j = 0; j < inputs.size(); j++) {
-//                        String key = inputs.get(j).key();
-//                        String type = "";
-//                        Element elementTemp = (Element) elementList.toArray()[j];
-//                        if (elementTemp.attr("name").equals(key))
-//                            type = elementTemp.attr("type");
-//                        Element eTemp = forms.get(i)
-//                                .selectFirst("#" + key);
-//                        String wordTemp;
-//                        System.out.println(type);
-//                        switch (type) {
-//                            case "text":
-//                            case "search":
-//                                wordTemp = UtilsKt.getRandomHyponym(inputs.get(j).key());
-//                                eTemp.val(wordTemp.isEmpty() ? "abs" : wordTemp);
-//                                break;
-//                            case "date":
-//                                eTemp.val(StaticAttributes.randomDate.get(k));
-//                                break;
-//                            case "email":
-//                                eTemp.val(StaticAttributes.randomEmail.get(k));
-//                                break;
-//                            case "month":
-//                                eTemp.val(StaticAttributes.randomMonth.get(k));
-//                                break;
-//                            case "number":
-//                                eTemp.val(new Random().nextInt() + "");
-//                                break;
-//                            case "tel":
-//                                eTemp.val(StaticAttributes.randomTel.get(k));
-//                                break;
-//                            case "time":
-//                                eTemp.val(StaticAttributes.randomTime.get(k));
-//                                break;
-//                            case "week":
-//                                eTemp.val(StaticAttributes.randomWeek.get(k));
-//                                break;
-//                            default:
-//                                eTemp.val("haaale");
-//                                break;
-//                        }
-//                    }
-//                    if (submittingForm(forms.get(i), method, action))
-//                        break;
-//                }
-//                String normalizedBaseUrl = baseUrl.split("://")[1].split("/")[0];
-//                File file = new File("./data/form/" + normalizedBaseUrl + "/");
-//                if (!file.exists()) {
-//                    file.mkdirs();
-//                }
-//                FileWriter fw = new FileWriter(
-//                        "./data/form/" + normalizedBaseUrl + "/" + id + ".html"
-//                );
-//                fw.write(forms.get(i).attributes().html());
-//                fw.write(forms.get(i).html());
-//                fw.close();
-//            }
-//        } catch (Exception e) {
-//            e.printStackTrace();
-//        }
-//        System.out.println("Success...");
-//
-//    }
-
     private Connection.Response submittingForm(FormElement form, Map<String, String> cookies) {
         try {
             return form.submit().cookies(cookies).followRedirects(true).execute();
-//            String formUrl = baseUrl + action;
-//            Connection.Method connectMethod = method.toUpperCase().equals("POST") ?
-//                    Connection.Method.POST : Connection.Method.GET;
-//
-//            Connection.Response goToFormPage = Jsoup.connect(formUrl)
-//                    .userAgent(StaticAttributes.USER_AGENT)
-//                    .method(Connection.Method.GET)
-//                    .execute();
-//
-//            Connection.Response connection = Jsoup
-//                    .connect(formUrl)
-//                    .userAgent(StaticAttributes.USER_AGENT)
-//                    .cookies(goToFormPage.cookies())
-//                    .data(form.formData())
-//                    .method(connectMethod)
-//                    .execute();
-//
-//            System.out.println(connection.url());
-//
-//            if (!connection.url().toString().equals(formUrl)) {
-//                getMyController().addSeed(connection.url().toString());
-//                return true;
-//            } else return false;
         } catch (Exception e) {
             e.printStackTrace();
             return null;
         }
-
     }
 
     @Override
     public boolean shouldVisit(Page referringPage, WebURL url) {
         String href = url.getURL().toLowerCase();
-        boolean b = !FILTERS.matcher(href).matches() && data.get(href) == null;
+        boolean b = !FILTERS.matcher(href).matches() && data.get(href) == null && !disallowed.contains(href);
         if (!external) {
-            return href.startsWith(baseUrl) && b;
+            return internal.matcher(href).matches() && b;
         }
         return b;
-//        return true;
     }
 
     private Set<String> extractOutgoingUrls(String html, String url) {
+        if (data.size() >= 200) {
+            System.out.println("Maximum links exceeded!");
+            return Set.of();
+        }
         Document document = Jsoup.parse(html);
         return document
                 .body()
@@ -295,12 +195,37 @@ public class FormCrawler extends WebCrawler {
                 .map(a -> buildUrl(a, url))
                 .filter(a -> {
                     if (!external) {
-                        return a.startsWith(baseUrl);
+                        return internal.matcher(a).matches();
                     }
                     return true;
                 })
                 .filter(a -> !data.containsKey(a))
+                .filter(a -> !disallowed.contains(a))
                 .collect(Collectors.toSet());
+    }
+
+    private boolean canIndex(String html) {
+        if (!respectRobots) return true;
+        Document document = Jsoup.parse(html);
+        AtomicBoolean noIndex = new AtomicBoolean(false);
+        document.head().getElementsByTag("meta").forEach(element -> {
+            if (element.attr("name").equalsIgnoreCase("robots") && element.attr("content").contains("noindex")) {
+                noIndex.set(true);
+            }
+        });
+        return !noIndex.get();
+    }
+
+    private boolean canFollow(String html) {
+        if (!respectRobots) return true;
+        Document document = Jsoup.parse(html);
+        AtomicBoolean noFollow = new AtomicBoolean(false);
+        document.head().getElementsByTag("meta").forEach(element -> {
+            if (element.attr("name").equalsIgnoreCase("robots") && element.attr("content").contains("nofollow")) {
+                noFollow.set(true);
+            }
+        });
+        return !noFollow.get();
     }
 
     @Override
@@ -309,27 +234,13 @@ public class FormCrawler extends WebCrawler {
         System.out.println("Crawled: " + url);
         if (page.getParseData() instanceof HtmlParseData) {
             String html = ((HtmlParseData) page.getParseData()).getHtml();
-            if (respectRobots) {
-                Document document = Jsoup.parse(html);
-                AtomicBoolean noIndex = new AtomicBoolean(false);
-                AtomicBoolean noFollow = new AtomicBoolean(false);
-                document.head().getElementsByTag("meta").forEach(element -> {
-                    if (element.attr("name").equalsIgnoreCase("robots") && element.attr("content").contains("noindex")) {
-                        noIndex.set(true);
-                    }
-                    if (element.attr("name").equalsIgnoreCase("robots") && element.attr("content").contains("nofollow")) {
-                        noFollow.set(true);
-                    }
-                });
-                if (!noFollow.get() && !hasSiteMap) {
+            if (canIndex(html)) {
+                saveHtml(html, url);
+            }
+            if (!hasSiteMap) {
+                if (canFollow(html)) {
                     extractOutgoingUrls(html, url).forEach(a -> getMyController().addSeed(a));
                 }
-                if (!noIndex.get()) {
-                    saveHtml(html, url);
-                }
-            } else {
-                extractOutgoingUrls(html, url).forEach(a -> getMyController().addSeed(a));
-                saveHtml(html, url);
             }
             enhancedForm(html, url);
         }

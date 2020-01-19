@@ -1,24 +1,15 @@
 package utils;
 
-import java.io.File;
-import java.io.FileOutputStream;
-import java.io.IOException;
-import java.io.PrintWriter;
 import java.net.URI;
 import java.net.URISyntaxException;
-import java.net.http.HttpClient;
-import java.net.http.HttpRequest;
-import java.net.http.HttpResponse;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.stream.Collectors;
 
 public class StaticAttributes {
     public static final String USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/51.0.2704.103 Safari/537.36";
     public static final String CRAWL_STORAGE_FOLDER = "./data/crawl/root";
-
     public static final List<String> randomDate = Arrays.asList(
             "2019-05-05",
             "2020-10-05",
@@ -97,30 +88,6 @@ public class StaticAttributes {
             "989226521258"
     );
 
-
-    public static void saveHtml(String html, String url, String baseUrl) {
-        String normalizedBaseUrl = baseUrl.split("://")[1].split("/")[0];
-        File baseFile = new File("./data/html/" + normalizedBaseUrl + "/");
-        if (!baseFile.exists()) {
-            baseFile.mkdirs();
-        }
-        File file = new File("./data/html/" + normalizedBaseUrl + "/" + url.hashCode() + ".html");
-        if (!file.exists()) {
-            try {
-                file.createNewFile();
-            } catch (IOException e) {
-                e.printStackTrace();
-                return;
-            }
-            try (FileOutputStream fos = new FileOutputStream(file); PrintWriter pw = new PrintWriter(fos)) {
-                pw.print(html);
-                pw.flush();
-            } catch (IOException e) {
-                e.printStackTrace();
-            }
-        }
-    }
-
     public static void clearData(Map<String, Boolean> data, Set<String> formActions) {
         data.clear();
         formActions.clear();
@@ -146,45 +113,18 @@ public class StaticAttributes {
         }
     }
 
-    public static HttpResponse<String> requestGet(String url, Map<String, String> params) {
-        String actualUrl = url + "?" + params.entrySet().stream().map(param -> param.getKey() + "=" + param.getValue()).collect(Collectors.joining("&"));
-        HttpClient client = HttpClient
-                .newBuilder()
-                .followRedirects(HttpClient.Redirect.NORMAL)
-                .build();
-        HttpRequest request = HttpRequest
-                .newBuilder()
-                .GET()
-                .uri(URI.create(actualUrl))
-                .build();
-        try {
-            return client.send(request, HttpResponse.BodyHandlers.ofString());
-        } catch (IOException | InterruptedException e) {
-            e.printStackTrace();
-        }
-        return null;
-    }
-
-    public static HttpResponse<String> requestPost(String url, Map<String, String> params) {
-        HttpClient client = HttpClient
-                .newBuilder()
-                .followRedirects(HttpClient.Redirect.NORMAL)
-                .build();
-        HttpRequest request = HttpRequest
-                .newBuilder()
-                .header("Content-Type", "application/x-www-form-urlencoded")
-                .POST(HttpRequest.BodyPublishers.ofString(params.entrySet().stream().map(param -> param.getKey() + "=" + param.getValue()).collect(Collectors.joining("&"))))
-                .uri(URI.create(url))
-                .build();
-        try {
-            return client.send(request, HttpResponse.BodyHandlers.ofString());
-        } catch (IOException | InterruptedException e) {
-            e.printStackTrace();
-        }
-        return null;
-    }
-
     public static String rawUrl(String url) {
         return url.split("://")[1].split("/")[0];
+    }
+
+    public static String buildUrl(String baseUrl, String url) {
+        // if a url in href starts with / (e.g. "/login") then the full url will be
+        // (e.g.) "lms.ui.ac.ir/login"
+        // if it doesn't start with / (e.g. "login") then it will be appended to current page url
+        // (e.g.) "lms.ui.ac.ir/accounts/login"
+        if (isAbsoluteUrl(url)) {
+            return url;
+        }
+        return baseUrl + url;
     }
 }

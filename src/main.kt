@@ -10,9 +10,11 @@ import org.jsoup.Jsoup
 import org.jsoup.UncheckedIOException
 import utils.StaticAttributes.*
 import java.net.URI
+import java.net.URL
 import java.net.http.HttpClient
 import java.net.http.HttpRequest
 import java.net.http.HttpResponse
+
 
 var crawlData = mutableMapOf<String, Boolean>()
 var formActions = mutableSetOf<String>()
@@ -48,11 +50,15 @@ private fun getSitemap(url: String): List<String> {
     return sites
 }
 
+private fun getRobotsDisallowed(url: String) =
+    URL("$url/robots.txt").readText().split("\n").filter { it.toLowerCase().contains("disallow") }
+        .map { it.split(":")[1].trim() }.map { buildUrl(url, it) }.toSet()
+
 fun getSiteMap(url: String) = getSitemap("$url/sitemap.xml").map {
     normalizeUrl(it)
 }.map {
-    if (!isAbsoluteUrl(it)) "$url/$it" else it
-}
+    buildUrl(url, it)
+}.map { if (url.contains("https")) it.replace("http:", "https:") else it }
 
 private fun startCrawler(
     baseUrl: String,
@@ -61,6 +67,13 @@ private fun startCrawler(
     respectRobots: Boolean,
     includeExternals: Boolean
 ): CrawlController {
+    val disallowed = if (respectRobots) {
+        try {
+            getRobotsDisallowed(baseUrl)
+        } catch (ignored: Exception) {
+            setOf()
+        }
+    } else setOf()
     val config = CrawlConfig()
     config.crawlStorageFolder = CRAWL_STORAGE_FOLDER
     // don't crawl links on page
@@ -70,14 +83,14 @@ private fun startCrawler(
     config.threadMonitoringDelaySeconds = 2
     config.isRespectNoIndex = false
     config.isRespectNoFollow = false
-    config.isFollowRedirects = true
-
+    config.isFollowRedirects = false
+    config.isIncludeHttpsPages = true
     val pageFetcher = PageFetcher(config)
     val robotstxtConfig = RobotstxtConfig()
     val robotstxtServer = RobotstxtServer(robotstxtConfig, pageFetcher)
     val controller = CrawlController(config, pageFetcher, robotstxtServer)
-    initialSeed.forEach { controller.addSeed(it) }
-    val factory = { FormCrawler(includeExternals, crawlData, formActions, baseUrl, respectRobots, sitemap) }
+    initialSeed.filterNot { it in disallowed }.forEach { controller.addSeed(it) }
+    val factory = { FormCrawler(crawlData, disallowed, formActions, baseUrl, respectRobots, sitemap, includeExternals) }
     controller.startNonBlocking(factory, 8)
     return controller
 }
@@ -89,26 +102,6 @@ fun crawlWithSiteMap(sitemap: List<String>, baseUrl: String) = startCrawler(
     respectRobots = false,
     includeExternals = false
 )
-//        : CrawlController {
-//    val config = CrawlConfig()
-//    config.crawlStorageFolder = CRAWL_STORAGE_FOLDER
-//    // don't crawl links on page
-//    config.maxDepthOfCrawling = 0
-//    config.cleanupDelaySeconds = 2
-//    config.threadShutdownDelaySeconds = 2
-//    config.threadMonitoringDelaySeconds = 2
-//
-//    val pageFetcher = PageFetcher(config)
-//    val robotstxtConfig = RobotstxtConfig()
-//    val robotstxtServer = RobotstxtServer(robotstxtConfig, pageFetcher)
-//    val controller = CrawlController(config, pageFetcher, robotstxtServer)
-//    sitemap.forEach {
-//        controller.addSeed(it)
-//    }
-//    val factory = { SimpleCrawler(crawlData, baseUrl) }
-//    controller.startNonBlocking(factory, 8)
-//    return controller
-//}
 
 fun deepCrawl(request: CrawlRequest) = startCrawler(
     normalizeUrl(request.url),
@@ -117,26 +110,3 @@ fun deepCrawl(request: CrawlRequest) = startCrawler(
     respectRobots = request.respectRobots,
     includeExternals = request.includeExternals
 )
-//        : CrawlController {
-//    val config = CrawlConfig()
-//    config.crawlStorageFolder = CRAWL_STORAGE_FOLDER
-//    config.maxDepthOfCrawling = 4
-//    config.cleanupDelaySeconds = 2
-//    config.threadShutdownDelaySeconds = 2
-//    config.threadMonitoringDelaySeconds = 2
-//    config.isRespectNoFollow = request.respectRobots
-//    config.isRespectNoIndex = request.respectRobots
-//
-//    val pageFetcher = PageFetcher(config)
-//    val robotstxtConfig = RobotstxtConfig()
-//    val robotstxtServer = RobotstxtServer(robotstxtConfig, pageFetcher)
-//    val controller = CrawlController(config, pageFetcher, robotstxtServer)
-//    controller.addSeed(request.url)
-//    val factory = { FormCrawler(request.includeExternals, crawlData, request.url) }
-//    controller.startNonBlocking(factory, 8)
-//    return controller
-//}
-
-fun main() {
-    deepCrawl(CrawlRequest("http://lms.ui.ac.ir"))
-}
