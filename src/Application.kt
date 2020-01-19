@@ -48,9 +48,8 @@ fun Application.module(testing: Boolean = false) {
                 when (frame) {
                     is Frame.Text -> {
                         val requestText = frame.readText()
-                        println(requestText)
                         val request = jacksonObjectMapper().readValue<CrawlRequest>(requestText)
-                        val siteMap = getSiteMap("${normalizeUrl(request.url)}/sitemap.xml")
+                        val siteMap = getSiteMap(normalizeUrl(request.url))
                         val data = jacksonObjectMapper().writerWithDefaultPrettyPrinter()
                             .writeValueAsString(mapOf("sitemap" to siteMap.isNotEmpty()))
                         outgoing.send(Frame.Text(data))

@@ -126,13 +126,17 @@ public class StaticAttributes {
 
     public static String normalizeUrl(String url) {
         String result = url.toLowerCase();
-        if (result.startsWith("/")) {
-            result = result.substring(1);
-        }
+//        if (result.startsWith("/")) {
+//            result = result.substring(1);
+//        }
         if (result.endsWith("/")) {
             result = result.substring(0, result.length() - 1);
         }
         return result;
+    }
+
+    public static boolean isRootRelativeUrl(String url) {
+        return url.startsWith("/");
     }
 
     public static boolean isAbsoluteUrl(String url) {

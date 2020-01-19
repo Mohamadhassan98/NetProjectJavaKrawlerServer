@@ -4,21 +4,22 @@ import edu.uci.ics.crawler4j.crawler.Page;
 import edu.uci.ics.crawler4j.crawler.WebCrawler;
 import edu.uci.ics.crawler4j.parser.HtmlParseData;
 import edu.uci.ics.crawler4j.url.WebURL;
-import net.project.UtilsKt;
 import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
 import org.jsoup.select.Elements;
 import utils.StaticAttributes;
 
-import java.io.File;
-import java.io.FileWriter;
-import java.io.IOException;
+import java.io.*;
 import java.net.http.HttpResponse;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Random;
+import java.util.Set;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 
+import static net.project.UtilsKt.getRandomHyponym;
 import static utils.StaticAttributes.*;
 
 
@@ -30,18 +31,22 @@ public class FormCrawler extends WebCrawler {
     private final boolean external;
     private final Map<String, Boolean> data;
     private final String baseUrl;
+    private final boolean respectRobots;
+    private final boolean hasSiteMap;
 
-    public FormCrawler(boolean external, Map<String, Boolean> data, String baseUrl) {
+    public FormCrawler(boolean external, Map<String, Boolean> data, String baseUrl, boolean respectRobots, boolean hasSiteMap) {
         this.data = data;
         this.external = external;
         this.baseUrl = normalizeUrl(baseUrl);
+        this.respectRobots = respectRobots;
+        this.hasSiteMap = hasSiteMap;
     }
 
     private static String dataGenerate(String name, String type, int k) {
         switch (type.toLowerCase()) {
             case "text":
             case "search":
-                return UtilsKt.getRandomHyponym(name);
+                return getRandomHyponym(name);
             case "date":
                 return StaticAttributes.randomDate.get(k);
             case "email":
@@ -61,7 +66,7 @@ public class FormCrawler extends WebCrawler {
         }
     }
 
-    public void enhancedForm(String htmlText, String url) {
+    private void enhancedForm(String htmlText, String url) {
         String normalizedUrl = normalizeUrl(url);
         Document html = Jsoup.parse(htmlText);
         try {
@@ -69,6 +74,7 @@ public class FormCrawler extends WebCrawler {
             data.put(url, !forms.isEmpty());
             forms.forEach(form -> {
                 String action = normalizeUrl(form.attr("action"));
+                boolean isRootRelativeAction = isRootRelativeUrl(action);
                 boolean absolute = isAbsoluteUrl(action);
                 String id = form.attr("name");
                 String method = form.attr("method");
@@ -81,7 +87,7 @@ public class FormCrawler extends WebCrawler {
                         String type = input.attr("type");
                         params.put(name, dataGenerate(name, type, finalI));
                     });
-                    String requestUrl = absolute ? action : normalizedUrl + "/" + action;
+                    String requestUrl = absolute ? action : (isRootRelativeAction ? baseUrl : (normalizedUrl + "/") + action);
                     switch (method.toLowerCase()) {
                         case "get": {
                             HttpResponse<String> response = requestGet(requestUrl, params);
@@ -248,18 +254,67 @@ public class FormCrawler extends WebCrawler {
         return b;
     }
 
+    private Set<String> extractOutgoingUrls(String html, String url) {
+        Document document = Jsoup.parse(html);
+        return document
+                .body()
+                .getElementsByTag("a")
+                .stream()
+                .map(a -> a.attr("href"))
+                .filter(a -> !a.isEmpty())
+                .map(a -> isAbsoluteUrl(a) ? a : (isRootRelativeUrl(a) ? (baseUrl + a) : (url + "/" + a)))
+                .collect(Collectors.toSet());
+    }
+
     @Override
     public void visit(Page page) {
         String url = page.getWebURL().getURL().toLowerCase();
         System.out.println("Crawled: " + url);
         if (page.getParseData() instanceof HtmlParseData) {
-            StaticAttributes.saveHtml(((HtmlParseData) page.getParseData()).getHtml(), url, baseUrl);
-        }
-
-        if (page.getParseData() instanceof HtmlParseData) {
-            HtmlParseData htmlParseData = (HtmlParseData) page.getParseData();
-            String html = htmlParseData.getHtml();
+            String html = ((HtmlParseData) page.getParseData()).getHtml();
+            if (respectRobots) {
+                Document document = Jsoup.parse(html);
+                AtomicBoolean noIndex = new AtomicBoolean(false);
+                AtomicBoolean noFollow = new AtomicBoolean(false);
+                document.head().getElementsByTag("meta").forEach(element -> {
+                    if (element.attr("name").equalsIgnoreCase("robots") && element.attr("content").contains("noindex")) {
+                        noIndex.set(true);
+                    }
+                    if (element.attr("name").equalsIgnoreCase("robots") && element.attr("content").contains("nofollow")) {
+                        noFollow.set(true);
+                    }
+                });
+                if (!noFollow.get() && !hasSiteMap) {
+                    extractOutgoingUrls(html, url).forEach(a -> getMyController().addSeed(a));
+                }
+                if (!noIndex.get()) {
+                    saveHtml(html, url);
+                }
+            }
             enhancedForm(html, url);
+        }
+    }
+
+    public void saveHtml(String html, String url) {
+        String rawUrl = rawUrl(baseUrl);
+        File baseFile = new File("./data/html/" + rawUrl + "/");
+        if (!baseFile.exists()) {
+            baseFile.mkdirs();
+        }
+        File file = new File("./data/html/" + rawUrl + "/" + url.hashCode() + ".html");
+        if (!file.exists()) {
+            try {
+                file.createNewFile();
+            } catch (IOException e) {
+                e.printStackTrace();
+                return;
+            }
+            try (FileOutputStream fos = new FileOutputStream(file); PrintWriter pw = new PrintWriter(fos)) {
+                pw.print(html);
+                pw.flush();
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
         }
     }
 }
