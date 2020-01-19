@@ -42,6 +42,14 @@ public class FormCrawler extends WebCrawler {
         this.hasSiteMap = hasSiteMap;
     }
 
+    /**
+     * Generates data based on name of tag, it's type and retrial time.
+     *
+     * @param name the name of tag, used to extract hyponym from wordnet
+     * @param type the type of tag
+     * @param k    the time of retrial, in range 0..10 (inclusive)
+     * @return a data to fill in form
+     */
     private static String dataGenerate(String name, String type, int k) {
         switch (type.toLowerCase()) {
             case "text":
@@ -70,27 +78,48 @@ public class FormCrawler extends WebCrawler {
         String normalizedUrl = normalizeUrl(url);
         Document html = Jsoup.parse(htmlText);
         try {
+            //Get all forms in page
             Elements forms = html.getElementsByTag("form");
             data.put(url, !forms.isEmpty());
             forms.forEach(form -> {
+                // extract action of form
                 String action = normalizeUrl(form.attr("action"));
+                // if a url in href starts with / (e.g. "/login") then the full url will be
+                // (e.g.) "lms.ui.ac.ir/login"
+                // if it doesn't start with / (e.g. "login") then it will be appended to current page url
+                // (e.g.) "lms.ui.ac.ir/accounts/login"
                 boolean isRootRelativeAction = isRootRelativeUrl(action);
+                // absolute urls are non relative urls
                 boolean absolute = isAbsoluteUrl(action);
+                // extract name of form
                 String id = form.attr("name");
+                // extract method of form
                 String method = form.attr("method");
+                // extract all inputs of form
                 Elements inputs = form.getElementsByTag("input");
+                // build a map of (inputName -> inputValue)
+                // used to submit form
                 Map<String, String> params = new HashMap<>();
+                // repeat submit 10 times
                 for (int i = 0; i < 10; i++) {
                     int finalI = i;
+                    // for each input in form...
                     inputs.forEach(input -> {
+                        // extract name of input
                         String name = input.attr("name");
+                        // extract type of input
                         String type = input.attr("type");
+                        // put (name -> value) to map
                         params.put(name, dataGenerate(name, type, finalI));
                     });
+                    // build full url of form action
                     String requestUrl = absolute ? action : (isRootRelativeAction ? baseUrl : (normalizedUrl + "/") + action);
                     switch (method.toLowerCase()) {
                         case "get": {
+                            // if method is get, send get request with query strings to it
+                            // e.g. send "lms.ui.ac.ir/login?username=ali&password=1234"
                             HttpResponse<String> response = requestGet(requestUrl, params);
+                            // if request was successful, i.e. status code is from 200 family
                             if (response != null && response.statusCode() / 100 == 2) {
                                 File file = new File("./data/form_data/" + rawUrl(baseUrl) + "/" + normalizedUrl.hashCode() + "/");
                                 if (!file.exists()) {
@@ -101,11 +130,14 @@ public class FormCrawler extends WebCrawler {
                                 } catch (IOException e) {
                                     e.printStackTrace();
                                 }
+                                // no need to more requests
                                 break;
                             }
                         }
                         break;
                         case "post": {
+                            // if method is post, send post request form data to it
+                            // e.g. send "lms.ui.ac.ir/login" with json body
                             HttpResponse<String> response = requestPost(requestUrl, params);
                             if (response != null && response.statusCode() / 100 == 2) {
                                 File file = new File("./data/form_data/" + rawUrl(baseUrl) + "/" + normalizedUrl.hashCode() + "/");
@@ -262,6 +294,13 @@ public class FormCrawler extends WebCrawler {
                 .stream()
                 .map(a -> a.attr("href"))
                 .filter(a -> !a.isEmpty())
+                .filter(a -> {
+                    if (!external) {
+                        return a.startsWith(baseUrl);
+                    }
+                    return true;
+                })
+                .filter(a -> !data.containsKey(a))
                 .map(a -> isAbsoluteUrl(a) ? a : (isRootRelativeUrl(a) ? (baseUrl + a) : (url + "/" + a)))
                 .collect(Collectors.toSet());
     }
@@ -290,6 +329,9 @@ public class FormCrawler extends WebCrawler {
                 if (!noIndex.get()) {
                     saveHtml(html, url);
                 }
+            } else {
+                extractOutgoingUrls(html, url).forEach(a -> getMyController().addSeed(a));
+                saveHtml(html, url);
             }
             enhancedForm(html, url);
         }
