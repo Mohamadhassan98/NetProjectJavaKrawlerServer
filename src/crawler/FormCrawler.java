@@ -4,14 +4,15 @@ import edu.uci.ics.crawler4j.crawler.Page;
 import edu.uci.ics.crawler4j.crawler.WebCrawler;
 import edu.uci.ics.crawler4j.parser.HtmlParseData;
 import edu.uci.ics.crawler4j.url.WebURL;
+import org.jsoup.Connection;
 import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
+import org.jsoup.nodes.Element;
+import org.jsoup.nodes.FormElement;
 import org.jsoup.select.Elements;
 import utils.StaticAttributes;
 
 import java.io.*;
-import java.net.http.HttpResponse;
-import java.util.HashMap;
 import java.util.Map;
 import java.util.Random;
 import java.util.Set;
@@ -33,44 +34,47 @@ public class FormCrawler extends WebCrawler {
     private final String baseUrl;
     private final boolean respectRobots;
     private final boolean hasSiteMap;
+    private final Set<String> formActions;
 
-    public FormCrawler(boolean external, Map<String, Boolean> data, String baseUrl, boolean respectRobots, boolean hasSiteMap) {
+    public FormCrawler(boolean external, Map<String, Boolean> data, Set<String> formActions, String baseUrl, boolean respectRobots, boolean hasSiteMap) {
         this.data = data;
         this.external = external;
         this.baseUrl = normalizeUrl(baseUrl);
         this.respectRobots = respectRobots;
         this.hasSiteMap = hasSiteMap;
+        this.formActions = formActions;
     }
 
+
     /**
-     * Generates data based on name of tag, it's type and retrial time.
+     * Generates data based on name of tag, it's type and retrial time and fill into it
      *
-     * @param name the name of tag, used to extract hyponym from wordnet
-     * @param type the type of tag
-     * @param k    the time of retrial, in range 0..10 (inclusive)
-     * @return a data to fill in form
+     * @param input The input element to fill
+     * @param k     the time of retrial, in range 0..10 (inclusive)
      */
-    private static String dataGenerate(String name, String type, int k) {
-        switch (type.toLowerCase()) {
+    private static void fillDataGenerate(Element input, int k) {
+        String type = input.attr("type").toLowerCase();
+        String name = input.attr("name");
+        switch (type) {
             case "text":
             case "search":
-                return getRandomHyponym(name);
+                input.val(getRandomHyponym(name));
             case "date":
-                return StaticAttributes.randomDate.get(k);
+                input.val(StaticAttributes.randomDate.get(k));
             case "email":
-                return StaticAttributes.randomEmail.get(k);
+                input.val(StaticAttributes.randomEmail.get(k));
             case "month":
-                return StaticAttributes.randomMonth.get(k);
+                input.val(StaticAttributes.randomMonth.get(k));
             case "number":
-                return new Random().nextInt() + "";
+                input.val(new Random().nextInt() + "");
             case "tel":
-                return StaticAttributes.randomTel.get(k);
+                input.val(StaticAttributes.randomTel.get(k));
             case "time":
-                return StaticAttributes.randomTime.get(k);
+                input.val(StaticAttributes.randomTime.get(k));
             case "week":
-                return StaticAttributes.randomWeek.get(k);
+                input.val(StaticAttributes.randomWeek.get(k));
             default:
-                return "haaale";
+                input.val("haaale");
         }
     }
 
@@ -79,86 +83,78 @@ public class FormCrawler extends WebCrawler {
         Document html = Jsoup.parse(htmlText);
         try {
             //Get all forms in page
-            Elements forms = html.getElementsByTag("form");
+            Elements forms = html.select("form");
             data.put(url, !forms.isEmpty());
+            if (forms.isEmpty()) {
+                return;
+            }
+            // used to get cookies
+            Connection.Response preRequest = Jsoup
+                    .connect(normalizedUrl)
+                    .userAgent(USER_AGENT)
+                    .followRedirects(true)
+                    .method(Connection.Method.GET)
+                    .execute();
             forms.forEach(form -> {
+                FormElement formElement = (FormElement) form;
                 // extract action of form
                 String action = normalizeUrl(form.attr("action"));
-                // if a url in href starts with / (e.g. "/login") then the full url will be
-                // (e.g.) "lms.ui.ac.ir/login"
-                // if it doesn't start with / (e.g. "login") then it will be appended to current page url
-                // (e.g.) "lms.ui.ac.ir/accounts/login"
-                boolean isRootRelativeAction = isRootRelativeUrl(action);
-                // absolute urls are non relative urls
-                boolean absolute = isAbsoluteUrl(action);
+                // build full url of form action
+                String requestUrl = buildUrl(action, normalizedUrl);
+                if (formActions.contains(requestUrl)) return;
+                else formActions.add(requestUrl);
                 // extract name of form
                 String id = form.attr("name");
-                // extract method of form
-                String method = form.attr("method");
                 // extract all inputs of form
-                Elements inputs = form.getElementsByTag("input");
-                // build a map of (inputName -> inputValue)
-                // used to submit form
-                Map<String, String> params = new HashMap<>();
+                Elements inputs = extractEmptyInputs(formElement);
                 // repeat submit 10 times
                 for (int i = 0; i < 10; i++) {
                     int finalI = i;
                     // for each input in form...
-                    inputs.forEach(input -> {
-                        // extract name of input
-                        String name = input.attr("name");
-                        // extract type of input
-                        String type = input.attr("type");
-                        // put (name -> value) to map
-                        params.put(name, dataGenerate(name, type, finalI));
-                    });
-                    // build full url of form action
-                    String requestUrl = absolute ? action : (isRootRelativeAction ? baseUrl : (normalizedUrl + "/") + action);
-                    switch (method.toLowerCase()) {
-                        case "get": {
-                            // if method is get, send get request with query strings to it
-                            // e.g. send "lms.ui.ac.ir/login?username=ali&password=1234"
-                            HttpResponse<String> response = requestGet(requestUrl, params);
-                            // if request was successful, i.e. status code is from 200 family
-                            if (response != null && response.statusCode() / 100 == 2) {
-                                File file = new File("./data/form_data/" + rawUrl(baseUrl) + "/" + normalizedUrl.hashCode() + "/");
-                                if (!file.exists()) {
-                                    file.mkdirs();
-                                }
-                                try (FileWriter fw = new FileWriter("./data/form_data/" + rawUrl(baseUrl) + "/" + normalizedUrl.hashCode() + "/" + id + ".html")) {
-                                    fw.write(response.body());
-                                } catch (IOException e) {
-                                    e.printStackTrace();
-                                }
-                                // no need to more requests
-                                break;
-                            }
+                    inputs.forEach(input -> fillDataGenerate(input, finalI));
+                    Connection.Response response = submittingForm(formElement, preRequest.cookies());
+                    if (response != null && response.statusCode() / 100 == 2) {
+                        File file = new File("./data/form_data/" + rawUrl(baseUrl) + "/" + normalizedUrl.hashCode() + "/");
+                        if (!file.exists()) {
+                            file.mkdirs();
                         }
-                        break;
-                        case "post": {
-                            // if method is post, send post request form data to it
-                            // e.g. send "lms.ui.ac.ir/login" with json body
-                            HttpResponse<String> response = requestPost(requestUrl, params);
-                            if (response != null && response.statusCode() / 100 == 2) {
-                                File file = new File("./data/form_data/" + rawUrl(baseUrl) + "/" + normalizedUrl.hashCode() + "/");
-                                if (!file.exists()) {
-                                    file.mkdirs();
-                                }
-                                try (FileWriter fw = new FileWriter("./data/form_data/" + rawUrl(baseUrl) + "/" + normalizedUrl.hashCode() + "/" + id + ".html")) {
-                                    fw.write(response.body());
-                                } catch (IOException e) {
-                                    e.printStackTrace();
-                                }
-                                break;
-                            }
+                        try (FileWriter fw = new FileWriter("./data/form_data/" + rawUrl(baseUrl) + "/" + normalizedUrl.hashCode() + "/" + id + ".html")) {
+                            fw.write("for action " + requestUrl + " in page " + normalizedUrl + ":\n");
+                            fw.write(response.statusCode() + "\n");
+                            fw.write("with headers " + response.headers() + "\n");
+                            fw.write("-----------------------------------------------\n");
+                            fw.write(response.body());
+                        } catch (IOException e) {
+                            e.printStackTrace();
                         }
+                        // no need to more requests
                         break;
+                    } else if (response != null) {
+                        System.out.println("Couldn't crawl form, request failed with status code: " + response.statusCode());
                     }
                 }
             });
         } catch (Exception e) {
             e.printStackTrace();
         }
+    }
+
+    private Elements extractEmptyInputs(FormElement form) {
+        return form.select("input").not("[type=hidden]").not("[hidden]").not("[value~=(.+)]");
+    }
+
+    private String buildUrl(String url, String referer) {
+        // if a url in href starts with / (e.g. "/login") then the full url will be
+        // (e.g.) "lms.ui.ac.ir/login"
+        // if it doesn't start with / (e.g. "login") then it will be appended to current page url
+        // (e.g.) "lms.ui.ac.ir/accounts/login"
+        if (isAbsoluteUrl(url)) {
+            return url;
+        }
+        if (isRootRelativeUrl(url)) {
+            return baseUrl + url;
+        }
+        return referer + "/" + url;
     }
 
 //    public void form(String htmlText, String url) {
@@ -244,8 +240,9 @@ public class FormCrawler extends WebCrawler {
 //
 //    }
 
-//    public boolean submittingForm(FormElement form, String method, String action) {
-//        try {
+    private Connection.Response submittingForm(FormElement form, Map<String, String> cookies) {
+        try {
+            return form.submit().cookies(cookies).followRedirects(true).execute();
 //            String formUrl = baseUrl + action;
 //            Connection.Method connectMethod = method.toUpperCase().equals("POST") ?
 //                    Connection.Method.POST : Connection.Method.GET;
@@ -269,12 +266,12 @@ public class FormCrawler extends WebCrawler {
 //                getMyController().addSeed(connection.url().toString());
 //                return true;
 //            } else return false;
-//        } catch (Exception e) {
-//            e.printStackTrace();
-//            return false;
-//        }
-//
-//    }
+        } catch (Exception e) {
+            e.printStackTrace();
+            return null;
+        }
+
+    }
 
     @Override
     public boolean shouldVisit(Page referringPage, WebURL url) {
@@ -284,6 +281,7 @@ public class FormCrawler extends WebCrawler {
             return href.startsWith(baseUrl) && b;
         }
         return b;
+//        return true;
     }
 
     private Set<String> extractOutgoingUrls(String html, String url) {
@@ -294,6 +292,7 @@ public class FormCrawler extends WebCrawler {
                 .stream()
                 .map(a -> a.attr("href"))
                 .filter(a -> !a.isEmpty())
+                .map(a -> buildUrl(a, url))
                 .filter(a -> {
                     if (!external) {
                         return a.startsWith(baseUrl);
@@ -301,7 +300,6 @@ public class FormCrawler extends WebCrawler {
                     return true;
                 })
                 .filter(a -> !data.containsKey(a))
-                .map(a -> isAbsoluteUrl(a) ? a : (isRootRelativeUrl(a) ? (baseUrl + a) : (url + "/" + a)))
                 .collect(Collectors.toSet());
     }
 

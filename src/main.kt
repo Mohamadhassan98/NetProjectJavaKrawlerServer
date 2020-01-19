@@ -15,6 +15,7 @@ import java.net.http.HttpRequest
 import java.net.http.HttpResponse
 
 var crawlData = mutableMapOf<String, Boolean>()
+var formActions = mutableSetOf<String>()
 
 private fun getSitemap(url: String): List<String> {
     val client = HttpClient
@@ -69,13 +70,14 @@ private fun startCrawler(
     config.threadMonitoringDelaySeconds = 2
     config.isRespectNoIndex = false
     config.isRespectNoFollow = false
+    config.isFollowRedirects = true
 
     val pageFetcher = PageFetcher(config)
     val robotstxtConfig = RobotstxtConfig()
     val robotstxtServer = RobotstxtServer(robotstxtConfig, pageFetcher)
     val controller = CrawlController(config, pageFetcher, robotstxtServer)
     initialSeed.forEach { controller.addSeed(it) }
-    val factory = { FormCrawler(includeExternals, crawlData, baseUrl, respectRobots, sitemap) }
+    val factory = { FormCrawler(includeExternals, crawlData, formActions, baseUrl, respectRobots, sitemap) }
     controller.startNonBlocking(factory, 8)
     return controller
 }
@@ -136,19 +138,5 @@ fun deepCrawl(request: CrawlRequest) = startCrawler(
 //}
 
 fun main() {
-    val client = HttpClient
-        .newBuilder()
-        .followRedirects(HttpClient.Redirect.NORMAL)
-        .build()
-    val request = HttpRequest
-        .newBuilder()
-        .GET()
-        .uri(URI.create("http://lms.ui.ac.ir"))
-        .build()
-    val response = client.send(request, HttpResponse.BodyHandlers.ofString())
-    Jsoup.parse(response.body()).body().getElementsByTag("form").forEach {
-        it.getElementsByTag("input").forEach {
-            println(it.attr("type"))
-        }
-    }
+    deepCrawl(CrawlRequest("http://lms.ui.ac.ir"))
 }

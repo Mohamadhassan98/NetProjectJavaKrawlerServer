@@ -12,6 +12,7 @@ import java.net.http.HttpResponse;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 public class StaticAttributes {
@@ -120,15 +121,13 @@ public class StaticAttributes {
         }
     }
 
-    public static void clearData(Map<String, Boolean> data) {
+    public static void clearData(Map<String, Boolean> data, Set<String> formActions) {
         data.clear();
+        formActions.clear();
     }
 
     public static String normalizeUrl(String url) {
         String result = url.toLowerCase();
-//        if (result.startsWith("/")) {
-//            result = result.substring(1);
-//        }
         if (result.endsWith("/")) {
             result = result.substring(0, result.length() - 1);
         }
@@ -173,6 +172,7 @@ public class StaticAttributes {
                 .build();
         HttpRequest request = HttpRequest
                 .newBuilder()
+                .header("Content-Type", "application/x-www-form-urlencoded")
                 .POST(HttpRequest.BodyPublishers.ofString(params.entrySet().stream().map(param -> param.getKey() + "=" + param.getValue()).collect(Collectors.joining("&"))))
                 .uri(URI.create(url))
                 .build();

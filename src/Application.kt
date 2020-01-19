@@ -44,7 +44,7 @@ fun Application.module(testing: Boolean = false) {
     routing {
         webSocket("/crawl") {
             for (frame in incoming) {
-                StaticAttributes.clearData(crawlData)
+                StaticAttributes.clearData(crawlData, formActions)
                 when (frame) {
                     is Frame.Text -> {
                         val requestText = frame.readText()
